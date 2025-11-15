@@ -8,7 +8,8 @@ const timeZones = {
     'Saudi Arabia': 'Asia/Riyadh',
     'London': 'Europe/London',
     'Japan': 'Asia/Tokyo',
-    'South Korea': 'Asia/Seoul'
+    'South Korea': 'Asia/Seoul',
+    'Estonia': 'Europe/Tallinn'
 };
 
 // City names in order
@@ -19,7 +20,7 @@ function loadCityOrder() {
         try {
             const parsed = JSON.parse(saved);
             // Validate that all cities are present
-            const defaultCities = ['Manila', 'Gothenburg', 'Chennai', 'Hanoi', 'Dubai', 'Saudi Arabia', 'London', 'Japan', 'South Korea'];
+            const defaultCities = ['Manila', 'Gothenburg', 'Chennai', 'Hanoi', 'Dubai', 'Saudi Arabia', 'London', 'Japan', 'South Korea', 'Estonia'];
             const allPresent = defaultCities.every(city => parsed.includes(city));
             const allValid = parsed.every(city => defaultCities.includes(city));
             if (allPresent && allValid && parsed.length === defaultCities.length) {
@@ -29,7 +30,7 @@ function loadCityOrder() {
             console.warn('Failed to load saved column order:', e);
         }
     }
-    return ['Manila', 'Gothenburg', 'Chennai', 'Hanoi', 'Dubai', 'Saudi Arabia', 'London', 'Japan', 'South Korea'];
+    return ['Manila', 'Gothenburg', 'Chennai', 'Hanoi', 'Dubai', 'Saudi Arabia', 'London', 'Japan', 'South Korea', 'Estonia'];
 }
 
 let cities = loadCityOrder();
@@ -186,7 +187,8 @@ function generateTableHeader() {
             'Saudi Arabia': '(AST)',
             'London': '(GMT/BST)',
             'Japan': '(UTC+9)',
-            'South Korea': '(UTC+9)'
+            'South Korea': '(UTC+9)',
+            'Estonia': '(EET/EEST)'
         };
         
         return `<th>${city}<br><span class="tz-info">${tzInfo[city]}</span></th>`;
@@ -201,6 +203,12 @@ function generateTableHeader() {
 function generateTable() {
     const tableBody = document.getElementById('tableBody');
     const dateDisplay = document.getElementById('currentDate');
+    
+    // Save current selection state before clearing table
+    const savedSelection = {
+        startRow: selectionStartRow,
+        endRow: selectionEndRow
+    };
     
     // Generate header first to match current city order
     generateTableHeader();
@@ -254,16 +262,40 @@ function generateTable() {
         tableBody.appendChild(row);
     }
     
+    // Restore selection state after table is generated
+    // We'll restore both the state variables and the visual selection
+    if (savedSelection.startRow !== null && savedSelection.endRow !== null) {
+        selectionStartRow = savedSelection.startRow;
+        selectionEndRow = savedSelection.endRow;
+    } else {
+        // Clear selection state if there wasn't one
+        selectionStartRow = null;
+        selectionEndRow = null;
+    }
+    
     // Re-setup drag and drop after table generation to ensure handlers are attached
     // (needed because generateTableHeader() replaces the header HTML)
     setTimeout(() => {
         setupColumnDragAndDrop();
+        setupRowSelection();
+        
+        // Always restore selection after setupRowSelection completes
+        // This ensures the visual selection is applied even if setupRowSelection cleared it
+        if (selectionStartRow !== null && selectionEndRow !== null) {
+            // Use a small delay to ensure DOM is fully ready
+            setTimeout(() => {
+                updateRowSelection();
+            }, 10);
+        }
     }, 0);
 }
 
 // Navigation functions
 // Always create fresh Date objects to ensure timezone calculations are current
 function goToToday() {
+    // Clear selection when changing days
+    clearRowSelection();
+    
     // Create a fresh Date object to get the current time
     const now = new Date();
     currentDate = new Date(Date.UTC(
@@ -276,6 +308,9 @@ function goToToday() {
 }
 
 function goToPreviousDay() {
+    // Clear selection when changing days
+    clearRowSelection();
+    
     // Create a new Date object to avoid mutation issues
     const newDate = new Date(currentDate);
     newDate.setUTCDate(newDate.getUTCDate() - 1);
@@ -284,6 +319,9 @@ function goToPreviousDay() {
 }
 
 function goToNextDay() {
+    // Clear selection when changing days
+    clearRowSelection();
+    
     // Create a new Date object to avoid mutation issues
     const newDate = new Date(currentDate);
     newDate.setUTCDate(newDate.getUTCDate() + 1);
@@ -302,6 +340,7 @@ function setupColumnDragAndDrop() {
     
     let draggedColumn = null;
     let draggedIndex = -1;
+    let dragOverIndex = -1;
     
     draggableHeaders.forEach((header, index) => {
         header.classList.add('draggable');
@@ -314,12 +353,27 @@ function setupColumnDragAndDrop() {
             header.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/html', header.innerHTML);
+            
+            // Add a slight delay to ensure the dragging class is applied
+            setTimeout(() => {
+                if (header.classList.contains('dragging')) {
+                    header.style.opacity = '0.4';
+                }
+            }, 0);
         });
         
-        header.addEventListener('dragend', () => {
+        header.addEventListener('dragend', (e) => {
+            // Remove all drag-related classes with smooth transition
             header.classList.remove('dragging');
-            // Remove drag-over class from all headers
-            draggableHeaders.forEach(h => h.classList.remove('drag-over'));
+            header.style.opacity = '';
+            
+            // Remove drag-over class from all headers with a slight delay for smooth transition
+            setTimeout(() => {
+                draggableHeaders.forEach(h => {
+                    h.classList.remove('drag-over');
+                    h.style.transform = '';
+                });
+            }, 100);
         });
         
         header.addEventListener('dragover', (e) => {
@@ -327,18 +381,39 @@ function setupColumnDragAndDrop() {
             e.dataTransfer.dropEffect = 'move';
             
             const targetIndex = parseInt(header.getAttribute('data-column-index'));
+            
             if (targetIndex !== draggedIndex) {
+                // Remove drag-over from previous target
+                if (dragOverIndex !== -1 && dragOverIndex !== targetIndex) {
+                    const prevHeader = draggableHeaders[dragOverIndex];
+                    prevHeader.classList.remove('drag-over');
+                }
+                
+                // Add drag-over to current target
                 header.classList.add('drag-over');
+                dragOverIndex = targetIndex;
             }
         });
         
-        header.addEventListener('dragleave', () => {
-            header.classList.remove('drag-over');
+        header.addEventListener('dragleave', (e) => {
+            // Only remove drag-over if we're actually leaving the header
+            // (not just moving to a child element)
+            const rect = header.getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                header.classList.remove('drag-over');
+                if (dragOverIndex === parseInt(header.getAttribute('data-column-index'))) {
+                    dragOverIndex = -1;
+                }
+            }
         });
         
         header.addEventListener('drop', (e) => {
             e.preventDefault();
             header.classList.remove('drag-over');
+            dragOverIndex = -1;
             
             const targetIndex = parseInt(header.getAttribute('data-column-index'));
             
@@ -351,16 +426,172 @@ function setupColumnDragAndDrop() {
                 // Save the new order
                 saveCityOrder();
                 
-                // Regenerate table with new column order
-                generateTable();
+                // Add a smooth transition effect before regenerating
+                const table = document.getElementById('timeTable');
+                table.style.opacity = '0.7';
+                table.style.transform = 'scale(0.98)';
                 
-                // Re-setup drag and drop for the new column order (after a brief delay to ensure DOM is updated)
+                // Regenerate table with new column order
+                setTimeout(() => {
+                    generateTable();
+                    
+                    // Restore table appearance with smooth transition
+                    setTimeout(() => {
+                        table.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        table.style.opacity = '1';
+                        table.style.transform = 'scale(1)';
+                        
+                        // Remove transition after animation completes
+                        setTimeout(() => {
+                            table.style.transition = '';
+                        }, 300);
+                    }, 50);
+                }, 150);
+                
+                // Re-setup drag and drop for the new column order
                 setTimeout(() => {
                     setupColumnDragAndDrop();
-                }, 0);
+                }, 200);
             }
         });
     });
+}
+
+// Row selection functionality
+let isSelecting = false;
+let selectionStartRow = null;
+let selectionEndRow = null;
+
+function clearRowSelection() {
+    const tableBody = document.getElementById('tableBody');
+    if (tableBody) {
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach(row => {
+            row.classList.remove('row-selected', 'row-selected-start', 'row-selected-end');
+        });
+    }
+    selectionStartRow = null;
+    selectionEndRow = null;
+}
+
+function updateRowSelection() {
+    if (selectionStartRow === null || selectionEndRow === null) {
+        return;
+    }
+    
+    const tableBody = document.getElementById('tableBody');
+    if (!tableBody) return;
+    
+    const rows = Array.from(tableBody.querySelectorAll('tr'));
+    const startIndex = Math.min(selectionStartRow, selectionEndRow);
+    const endIndex = Math.max(selectionStartRow, selectionEndRow);
+    
+    // Clear all selections first
+    rows.forEach(row => {
+        row.classList.remove('row-selected', 'row-selected-start', 'row-selected-end');
+    });
+    
+    // Apply selection to range
+    for (let i = startIndex; i <= endIndex; i++) {
+        if (rows[i]) {
+            rows[i].classList.add('row-selected');
+            if (i === startIndex) {
+                rows[i].classList.add('row-selected-start');
+            }
+            if (i === endIndex) {
+                rows[i].classList.add('row-selected-end');
+            }
+        }
+    }
+}
+
+function getRowIndexFromElement(element) {
+    // Find the row (tr) element
+    let row = element;
+    while (row && row.tagName !== 'TR') {
+        row = row.parentElement;
+    }
+    
+    if (!row) return null;
+    
+    const tableBody = document.getElementById('tableBody');
+    if (!tableBody) return null;
+    
+    const rows = Array.from(tableBody.querySelectorAll('tr'));
+    return rows.indexOf(row);
+}
+
+// Set up document-level event listeners once
+let rowSelectionListenersSetup = false;
+
+function setupRowSelection() {
+    const tableBody = document.getElementById('tableBody');
+    if (!tableBody) return;
+    
+    // Use event delegation on the table for better performance
+    // This way we don't need to reattach listeners when table regenerates
+    // Note: We don't clear selection here - it's preserved across table regenerations
+    if (!rowSelectionListenersSetup) {
+        const timeTable = document.getElementById('timeTable');
+        if (timeTable) {
+            // Use event delegation on the table
+            timeTable.addEventListener('mousedown', (e) => {
+                const cell = e.target.closest('td');
+                if (!cell) return;
+                
+                // Skip the first column (UTC time) - don't allow selection from there
+                if (cell.classList.contains('utc-time')) {
+                    return;
+                }
+                
+                // Don't interfere with column drag and drop
+                if (e.target.closest('th')) {
+                    return;
+                }
+                
+                e.preventDefault();
+                isSelecting = true;
+                
+                const rowIndex = getRowIndexFromElement(cell);
+                if (rowIndex !== null) {
+                    selectionStartRow = rowIndex;
+                    selectionEndRow = rowIndex;
+                    updateRowSelection();
+                }
+            });
+            
+            timeTable.addEventListener('mousemove', (e) => {
+                if (!isSelecting) return;
+                
+                const cell = e.target.closest('td');
+                if (!cell || cell.classList.contains('utc-time')) {
+                    return;
+                }
+                
+                const rowIndex = getRowIndexFromElement(cell);
+                if (rowIndex !== null && selectionStartRow !== null && rowIndex !== selectionEndRow) {
+                    selectionEndRow = rowIndex;
+                    updateRowSelection();
+                }
+            });
+            
+            // Handle mouse up anywhere to end selection
+            document.addEventListener('mouseup', () => {
+                if (isSelecting) {
+                    isSelecting = false;
+                }
+            });
+            
+            // Clear selection when clicking outside the table
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#timeTable')) {
+                    clearRowSelection();
+                }
+            });
+            
+            rowSelectionListenersSetup = true;
+        }
+    }
 }
 
 // UTC column collapse functionality

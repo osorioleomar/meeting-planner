@@ -98,7 +98,7 @@ thead th {
     position: relative;
     user-select: none;
     cursor: move;
-    transition: background-color 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 thead th:first-child {
@@ -110,10 +110,12 @@ thead th:first-child {
 thead th.draggable {
     cursor: grab;
     position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 thead th.draggable:hover {
     background-color: rgba(166, 156, 172, 0.3);
+    transform: translateY(-2px);
 }
 
 thead th.draggable:active {
@@ -130,17 +132,49 @@ thead th.draggable::before {
     opacity: 0.6;
     line-height: 1;
     letter-spacing: -2px;
+    transition: opacity 0.2s ease;
+}
+
+thead th.draggable:hover::before {
+    opacity: 0.9;
 }
 
 thead th.dragging {
-    opacity: 0.5;
+    opacity: 0.4;
     background-color: rgba(166, 156, 172, 0.2);
+    transform: scale(0.95);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 thead th.drag-over {
-    background-color: rgba(166, 156, 172, 0.4);
-    border-left: 3px solid #a69cac;
-    border-right: 3px solid #a69cac;
+    background-color: rgba(166, 156, 172, 0.5);
+    border-left: 4px solid #a69cac;
+    border-right: 4px solid #a69cac;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(166, 156, 172, 0.5);
+}
+
+thead th.drag-over::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(166, 156, 172, 0.2) 50%, 
+        transparent 100%);
+    animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.6;
+    }
 }
 
 .tz-info {
@@ -153,7 +187,7 @@ thead th.drag-over {
 
 tbody tr {
     border-bottom: 1px solid #dbd7de;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.3s ease;
 }
 
 tbody tr:hover {
@@ -164,6 +198,7 @@ tbody td {
     padding: 12px;
     text-align: center;
     border-right: 1px solid #dbd7de;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 tbody td:first-child {
@@ -245,6 +280,106 @@ tbody tr.highlight-row:hover td:first-child {
 
 .highlight-row:hover td:first-child {
     background-color: #e1ae7e;
+}
+
+/* Row selection highlight with border */
+tbody tr.row-selected {
+    position: relative;
+}
+
+/* Top border on first selected row */
+tbody tr.row-selected-start::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    background: #4a90e2;
+    pointer-events: none;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.4);
+}
+
+/* Bottom border on last selected row */
+tbody tr.row-selected-end::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: #4a90e2;
+    pointer-events: none;
+    z-index: 2;
+    box-shadow: 0 -2px 8px rgba(74, 144, 226, 0.4);
+}
+
+/* Left border on all selected rows */
+tbody tr.row-selected td:first-child {
+    position: relative;
+}
+
+tbody tr.row-selected td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #4a90e2;
+    pointer-events: none;
+    z-index: 2;
+    box-shadow: -2px 0 8px rgba(74, 144, 226, 0.4);
+}
+
+/* Extend top border to connect with first row's top border */
+tbody tr.row-selected-start td:first-child::before {
+    top: -3px;
+}
+
+/* Extend bottom border to connect with last row's bottom border */
+tbody tr.row-selected-end td:first-child::before {
+    bottom: -3px;
+}
+
+/* Right border on all selected rows */
+tbody tr.row-selected td:last-child {
+    position: relative;
+}
+
+tbody tr.row-selected td:last-child::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #4a90e2;
+    pointer-events: none;
+    z-index: 2;
+    box-shadow: 2px 0 8px rgba(74, 144, 226, 0.4);
+}
+
+/* Extend top border to connect with first row's top border */
+tbody tr.row-selected-start td:last-child::after {
+    top: -3px;
+}
+
+/* Extend bottom border to connect with last row's bottom border */
+tbody tr.row-selected-end td:last-child::after {
+    bottom: -3px;
+}
+
+/* Make cells selectable */
+tbody td {
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: crosshair;
+}
+
+tbody td:first-child {
+    cursor: default;
 }
 
 /* Time cell color variations */
